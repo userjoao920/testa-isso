@@ -41,36 +41,56 @@ def simulate(cross):
     short_sma = df['close'].rolling(window=short_window).mean()
     long_sma = df['close'].rolling(window=long_window).mean()
 
-    in_position = False
-    balance = 1000
-    token_amount = 0
-    fee = 0.003  # 0.3%
-
     closes = df['close'].values
     short_sma_values = short_sma.values
     long_sma_values = long_sma.values
 
+    in_position = False
+    position_type = None  # None, 'long', 'short'
+    balance = 1000  # saldo em USDC
+    token_amount = 0  # quantidade de token comprado
+    fee = 0.003  # 0.3% por operação
+
     for i in range(1, len(df)):
-        # Pula enquanto SMA não disponível ainda
         if np.isnan(short_sma_values[i-1]) or np.isnan(long_sma_values[i-1]):
             continue
 
-        # Detecta cruzamento no candle anterior
-        if short_sma_values[i-1] > long_sma_values[i-1] and not in_position:
-            # Compra
-            token_amount = (balance * (1 - fee)) / closes[i]
-            balance = 0
-            in_position = True
+        # Cruzamento para cima: abrir LONG
+        if short_sma_values[i-1] <= long_sma_values[i-1] and short_sma_values[i] > long_sma_values[i]:
+            if position_type == 'short':
+                # Fechar short
+                balance += token_amount * closes[i] * (1 - fee)
+                token_amount = 0
+                position_type = None
 
-        elif short_sma_values[i-1] < long_sma_values[i-1] and in_position:
-            # Venda
-            balance = (token_amount * closes[i]) * (1 - fee)
-            token_amount = 0
-            in_position = False
+            if not in_position:
+                # Abrir long
+                token_amount = (balance * (1 - fee)) / closes[i]
+                balance = 0
+                in_position = True
+                position_type = 'long'
 
-    # Se estiver posicionado no final, vende
+        # Cruzamento para baixo: abrir SHORT
+        elif short_sma_values[i-1] >= long_sma_values[i-1] and short_sma_values[i] < long_sma_values[i]:
+            if position_type == 'long':
+                # Fechar long
+                balance += token_amount * closes[i] * (1 - fee)
+                token_amount = 0
+                position_type = None
+
+            if not in_position:
+                # Abrir short
+                token_amount = (balance * (1 - fee)) / closes[i]
+                balance = 0
+                in_position = True
+                position_type = 'short'
+
+    # Se terminar ainda posicionado, fechar posição
     if in_position:
-        balance = (token_amount * closes[-1]) * (1 - fee)
+        if position_type == 'long':
+            balance += token_amount * closes[-1] * (1 - fee)
+        elif position_type == 'short':
+            balance += token_amount * closes[-1] * (1 - fee)
 
     return {'short_window': short_window, 'long_window': long_window, 'balance': balance}
 
