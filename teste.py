@@ -1,100 +1,109 @@
 import ccxt
-import numpy as np
 import pandas as pd
+import numpy as np
 import time
-from datetime import datetime
 
-# Definir o cliente ccxt para acessar dados de mercado da MEXC
+# Inicializar ccxt para pegar dados da MEXC
 exchange = ccxt.mexc()
 
-# Configurações do backtest
-symbol = 'PEPE/USDT'
-timeframe = '15m'  # Intervalo de 15 minutos
-max_candles = 8000  # Últimos 8000 candles
-initial_capital = 1000  # Capital inicial
-best_results = []
+# Configurações
+symbol = 'PEPE/USDC'
+timeframe = '15m'
+limit = 8000  # Máximo de candles
 
-# Função para buscar os dados históricos de candles
-def get_candles():
-    # Recuperando os últimos 8000 candles (de acordo com a API da MEXC)
-    candles = exchange.fetch_ohlcv(symbol, timeframe, limit=max_candles)
-    df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    return df
+print("Baixando dados...")
+ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+print("Dados baixados com sucesso!")
 
-# Função de cálculo das médias móveis
-def moving_average(data, period):
-    return data['close'].rolling(window=period).mean()
+# Organizar os dados em DataFrame
+df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+df.set_index('timestamp', inplace=True)
 
-# Função para calcular o retorno e atualizar o capital com juros compostos
-def calculate_return(initial_balance, trades):
-    balance = initial_balance
-    for trade in trades:
-        balance *= (1 + trade)  # Calculando o capital com juros compostos
-    return balance
+# Função para executar o backtest
+def backtest(ma_rapida, ma_lenta):
+    saldo = 100  # saldo inicial em USDC
+    posicao = None  # 'buy' ou 'sell'
+    preco_entrada = 0
 
-# Função para executar o backtest e testar diferentes combinações de médias móveis
-def backtest():
-    df = get_candles()
-    best_results.clear()
-    total_combinations = (200 - 5 + 1) ** 2  # Testando médias de 5 a 200 para as duas médias
-    completed = 0  # Contador de progresso
-    last_progress_time = time.time()  # Variável para armazenar o tempo da última atualização do progresso
+    df['ma_rapida'] = df['close'].rolling(ma_rapida).mean()
+    df['ma_lenta'] = df['close'].rolling(ma_lenta).mean()
 
-    for short_period in range(5, 201):  # Média rápida de 5 a 200
-        for long_period in range(5, 201):  # Média devagar de 5 a 200
-            if short_period >= long_period:
-                continue  # Média rápida deve ser menor que a média devagar
+    for i in range(max(ma_rapida, ma_lenta), len(df)):
 
-            short_ma = moving_average(df, short_period)
-            long_ma = moving_average(df, long_period)
+        preco_atual = df['close'].iloc[i]
+        ma_r = df['ma_rapida'].iloc[i]
+        ma_l = df['ma_lenta'].iloc[i]
 
-            capital = initial_capital
-            trades = []  # Lista de resultados de operações
-            position = None  # A posição pode ser None, 'long' ou 'short'
+        if np.isnan(ma_r) or np.isnan(ma_l):
+            continue
 
-            # Loop para simular as operações de compra e venda
-            for i in range(max(short_period, long_period), len(df)):
-                if short_ma[i] > long_ma[i] and position != 'long':  # Cruzamento de alta (compra)
-                    if position == 'short':  # Fechar a posição vendida
-                        profit = (df['close'][i] - entry_price) / entry_price
-                        trades.append(profit)
-                    position = 'long'
-                    entry_price = df['close'][i]
-                elif short_ma[i] < long_ma[i] and position != 'short':  # Cruzamento de baixa (venda)
-                    if position == 'long':  # Fechar a posição comprada
-                        profit = (entry_price - df['close'][i]) / entry_price
-                        trades.append(profit)
-                    position = 'short'
-                    entry_price = df['close'][i]
+        if ma_r > ma_l:
+            # Sinal de compra
+            if posicao == 'sell':
+                # Fecha venda
+                percentual = (preco_entrada - preco_atual) / preco_entrada
+                saldo = saldo * (1 + percentual)
+                posicao = None
+            if posicao is None:
+                # Abre compra
+                preco_entrada = preco_atual
+                posicao = 'buy'
 
-            # Calculando o retorno total com juros compostos
-            final_balance = calculate_return(initial_capital, trades)
-            best_results.append((short_period, long_period, final_balance))
+        elif ma_r < ma_l:
+            # Sinal de venda
+            if posicao == 'buy':
+                # Fecha compra
+                percentual = (preco_atual - preco_entrada) / preco_entrada
+                saldo = saldo * (1 + percentual)
+                posicao = None
+            if posicao is None:
+                # Abre venda
+                preco_entrada = preco_atual
+                posicao = 'sell'
 
-            # Atualizar o progresso a cada 5 minutos
-            completed += 1
-            elapsed_time = time.time() - last_progress_time
-            if elapsed_time >= 300:  # A cada 5 minutos (300 segundos)
-                progress = (completed / total_combinations) * 100
-                print(f"Progresso: {progress:.2f}%")
-                last_progress_time = time.time()  # Atualizar o tempo da última verificação de progresso
+    # Fecha a última operação se ainda aberta
+    if posicao == 'buy':
+        percentual = (df['close'].iloc[-1] - preco_entrada) / preco_entrada
+        saldo = saldo * (1 + percentual)
+    elif posicao == 'sell':
+        percentual = (preco_entrada - df['close'].iloc[-1]) / preco_entrada
+        saldo = saldo * (1 + percentual)
 
-    # Ordenar os resultados e retornar os 5 melhores
-    best_results.sort(key=lambda x: x[2], reverse=True)
-    return best_results[:5]
+    return saldo
 
-# Função para exibir os melhores resultados
-def display_best_results():
-    print("\nTop 5 Melhores Resultados:")
-    for idx, (short_period, long_period, final_balance) in enumerate(best_results, 1):
-        print(f"{idx}. Média Rápida: {short_period}, Média Devagar: {long_period}, Saldo Final: {final_balance:.2f} USDT")
+# Testar todas combinações
+resultados = []
+total_testes = (200 - 5 + 1) ** 2
+testes_concluidos = 0
+progresso_aviso = 0
 
-# Executar o backtest e exibir os melhores resultados
-print("Iniciando o backtest...")
-start_time = time.time()
-top_results = backtest()
-end_time = time.time()
+inicio_tempo = time.time()
 
-print(f"\nBacktest concluído em {end_time - start_time:.2f} segundos")
-display_best_results()
+for ma_rapida in range(5, 201):
+    for ma_lenta in range(5, 201):
+        if ma_rapida >= ma_lenta:
+            continue  # Só interessa se a rápida for menor que a lenta
+
+        saldo_final = backtest(ma_rapida, ma_lenta)
+        resultados.append({
+            'ma_rapida': ma_rapida,
+            'ma_lenta': ma_lenta,
+            'saldo_final': saldo_final
+        })
+
+        testes_concluidos += 1
+        progresso_atual = int((testes_concluidos / total_testes) * 100)
+
+        if progresso_atual >= progresso_aviso + 10:
+            progresso_aviso = progresso_atual
+            tempo_passado = (time.time() - inicio_tempo) / 60  # minutos
+            print(f"Progresso: {progresso_atual}% - Tempo decorrido: {tempo_passado:.2f} min")
+
+# Ordenar resultados
+resultados_ordenados = sorted(resultados, key=lambda x: x['saldo_final'], reverse=True)
+
+# Mostrar top 10
+print("\nTop 10 melhores combinações:")
+for idx, r in enumerate(resultados_ordenados[:10]):
+    print(f"{idx+1}: Rápida {r['ma_rapida']} | Lenta {r['ma_lenta']} | Saldo final: {r['saldo_final']:.2f} USDC")
