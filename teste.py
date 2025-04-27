@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from flask import Flask
 import threading
+import time
 import os
 import logging
 from concurrent.futures import ProcessPoolExecutor
@@ -12,7 +13,7 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
-bot_status = "Iniciando o backtest..."  # Status inicial
+bot_status = "Iniciando o backtest..."
 
 # Setup da Exchange
 exchange = ccxt.mexc({
@@ -36,57 +37,42 @@ def simulate(cross):
     short_window, long_window = cross
     if short_window >= long_window:
         return {'short_window': short_window, 'long_window': long_window, 'balance': -np.inf}
-
+    
     short_sma = df['close'].rolling(window=short_window).mean()
     long_sma = df['close'].rolling(window=long_window).mean()
 
-    balance = 1000  # saldo inicial
-    position = 0  # quantidade de tokens (positivo = comprado, negativo = vendido)
-    entry_price = 0
-    fee = 0.0006  # 0.06% taxa da Binance Futuros normal, pode mudar se quiser
+    in_position = False
+    balance = 1000
+    token_amount = 0
+    fee = 0.003  # 0.3%
 
-    for i in range(max(short_window, long_window), len(df)):
-        price = df['close'].iloc[i]
+    closes = df['close'].values
+    short_sma_values = short_sma.values
+    long_sma_values = long_sma.values
 
-        # Sinal de cruzamento
-        if short_sma.iloc[i] > long_sma.iloc[i]:
-            # Cruzou para cima (sinal de compra)
-            if position <= 0:  # Se não estiver comprado
-                if position < 0:
-                    # Fechar short
-                    balance += abs(position) * (entry_price - price) * (1 - fee)
-                    position = 0
+    for i in range(1, len(df)):
+        # Pula enquanto SMA não disponível ainda
+        if np.isnan(short_sma_values[i-1]) or np.isnan(long_sma_values[i-1]):
+            continue
 
-                # Abrir long
-                size = (balance * (1 - fee)) / price
-                position = size
-                entry_price = price
+        # Detecta cruzamento no candle anterior
+        if short_sma_values[i-1] > long_sma_values[i-1] and not in_position:
+            # Compra
+            token_amount = (balance * (1 - fee)) / closes[i]
+            balance = 0
+            in_position = True
 
-        elif short_sma.iloc[i] < long_sma.iloc[i]:
-            # Cruzou para baixo (sinal de venda)
-            if position >= 0:  # Se não estiver vendido
-                if position > 0:
-                    # Fechar long
-                    balance += position * (price - entry_price) * (1 - fee)
-                    position = 0
+        elif short_sma_values[i-1] < long_sma_values[i-1] and in_position:
+            # Venda
+            balance = (token_amount * closes[i]) * (1 - fee)
+            token_amount = 0
+            in_position = False
 
-                # Abrir short
-                size = (balance * (1 - fee)) / price
-                position = -size
-                entry_price = price
+    # Se estiver posicionado no final, vende
+    if in_position:
+        balance = (token_amount * closes[-1]) * (1 - fee)
 
-    # Fechar posição aberta no final
-    final_price = df['close'].iloc[-1]
-    if position > 0:
-        balance += position * (final_price - entry_price) * (1 - fee)
-    elif position < 0:
-        balance += abs(position) * (entry_price - final_price) * (1 - fee)
-
-    return {
-        'short_window': short_window,
-        'long_window': long_window,
-        'balance': balance
-    }
+    return {'short_window': short_window, 'long_window': long_window, 'balance': balance}
 
 results = []
 done = False
@@ -95,22 +81,22 @@ def backtest():
     global results, bot_status, done
     bot_status = "Baixando candles e preparando o backtest..."
     logger.info(bot_status)
-    
+
     combinations = [(short, long) for short in range(5, 201) for long in range(5, 201)]
-    
+
     bot_status = "Executando simulações..."
     logger.info(bot_status)
-    
+
     with ProcessPoolExecutor() as executor:
         for result in tqdm(executor.map(simulate, combinations), total=len(combinations)):
             results.append(result)
-    
+
     results.sort(key=lambda x: x['balance'], reverse=True)
-    
+
     logger.info("TOP 5 melhores combinações:")
     for res in results[:5]:
         logger.info(res)
-    
+
     bot_status = "Backtest finalizado!"
     done = True
 
@@ -125,7 +111,6 @@ def home():
         melhores = "<br>".join([f"Short: {r['short_window']} / Long: {r['long_window']} - Resultado: {r['balance']:.2f} USDC" for r in results[:5]])
         return f"<h1>Backtest Concluído!</h1><p>{melhores}</p>"
 
-# Iniciar o backtest em thread separada
 threading.Thread(target=backtest, daemon=True).start()
 
 if __name__ == "__main__":
