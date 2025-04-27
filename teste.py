@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from flask import Flask
 import threading
-import time
 import os
 import logging
 from concurrent.futures import ProcessPoolExecutor
@@ -41,30 +40,37 @@ def simulate(cross):
     short_sma = df['close'].rolling(window=short_window).mean()
     long_sma = df['close'].rolling(window=long_window).mean()
 
-    in_position = False
-    balance = 1000  # Valor inicial do capital
-    token_amount = 0
-    fee = 0.003  # 0.3% de taxa
+    balance = 1000  # Saldo inicial
+    position = 0  # Nenhuma posição aberta
+    entry_price = 0  # Preço de entrada
+    fee = 0.003  # 0.3% taxa
 
-    # Para cada candle, verifica se há oportunidade de compra ou venda
     for i in range(max(short_window, long_window), len(df)):
-        # Compra: Quando a média curta cruza acima da média longa
-        if short_sma[i] > long_sma[i] and not in_position:
-            token_amount = (balance * (1 - fee)) / df['close'][i]  # Compra com o saldo disponível
-            balance = 0  # O saldo é 0 após a compra
-            in_position = True
+        current_price = df['close'].iloc[i]
         
-        # Venda: Quando a média curta cruza abaixo da média longa
-        elif short_sma[i] < long_sma[i] and in_position:
-            balance = (token_amount * df['close'][i]) * (1 - fee)  # Vende os tokens e atualiza o saldo
-            token_amount = 0  # Não tem mais tokens após a venda
-            in_position = False
-    
-    # Se ainda estiver com uma posição aberta, fecha a posição com o último preço disponível
-    if in_position:
-        balance = (token_amount * df['close'].iloc[-1]) * (1 - fee)
+        # Comprar (cruzamento de média para cima)
+        if short_sma.iloc[i] > long_sma.iloc[i] and position == 0:
+            # Compra todo o saldo disponível
+            position = (balance * (1 - fee)) / current_price
+            entry_price = current_price
+            balance = 0
+        
+        # Vender (cruzamento de média para baixo)
+        elif short_sma.iloc[i] < long_sma.iloc[i] and position > 0:
+            # Vende toda a posição
+            balance = (position * current_price) * (1 - fee)
+            position = 0
+            entry_price = 0
 
-    return {'short_window': short_window, 'long_window': long_window, 'balance': balance}
+    # Se ainda tiver posição aberta no final, vende tudo no último preço
+    if position > 0:
+        balance = (position * df['close'].iloc[-1]) * (1 - fee)
+
+    return {
+        'short_window': short_window,
+        'long_window': long_window,
+        'balance': balance
+    }
 
 results = []
 done = False
