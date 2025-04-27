@@ -39,6 +39,7 @@ def backtest():
     best_results.clear()
     total_combinations = (200 - 5 + 1) ** 2  # Testando médias de 5 a 200 para as duas médias
     completed = 0  # Contador de progresso
+    last_progress_time = time.time()  # Variável para armazenar o tempo da última atualização do progresso
 
     for short_period in range(5, 201):  # Média rápida de 5 a 200
         for long_period in range(5, 201):  # Média devagar de 5 a 200
@@ -71,10 +72,13 @@ def backtest():
             final_balance = calculate_return(initial_capital, trades)
             best_results.append((short_period, long_period, final_balance))
 
-            # Atualizar o progresso
+            # Atualizar o progresso a cada 5 minutos
             completed += 1
-            progress = (completed / total_combinations) * 100
-            print(f"Progresso: {progress:.2f}%")
+            elapsed_time = time.time() - last_progress_time
+            if elapsed_time >= 300:  # A cada 5 minutos (300 segundos)
+                progress = (completed / total_combinations) * 100
+                print(f"Progresso: {progress:.2f}%")
+                last_progress_time = time.time()  # Atualizar o tempo da última verificação de progresso
 
     # Ordenar os resultados e retornar os 5 melhores
     best_results.sort(key=lambda x: x[2], reverse=True)
