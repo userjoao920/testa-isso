@@ -40,31 +40,47 @@ def simulate(cross):
     short_sma = df['close'].rolling(window=short_window).mean()
     long_sma = df['close'].rolling(window=long_window).mean()
 
-    balance = 1000  # Saldo inicial
-    position = 0  # Nenhuma posição aberta
-    entry_price = 0  # Preço de entrada
-    fee = 0.003  # 0.3% taxa
+    balance = 1000  # saldo inicial
+    position = 0  # quantidade de tokens (positivo = comprado, negativo = vendido)
+    entry_price = 0
+    fee = 0.0006  # 0.06% taxa da Binance Futuros normal, pode mudar se quiser
 
     for i in range(max(short_window, long_window), len(df)):
-        current_price = df['close'].iloc[i]
-        
-        # Comprar (cruzamento de média para cima)
-        if short_sma.iloc[i] > long_sma.iloc[i] and position == 0:
-            # Compra todo o saldo disponível
-            position = (balance * (1 - fee)) / current_price
-            entry_price = current_price
-            balance = 0
-        
-        # Vender (cruzamento de média para baixo)
-        elif short_sma.iloc[i] < long_sma.iloc[i] and position > 0:
-            # Vende toda a posição
-            balance = (position * current_price) * (1 - fee)
-            position = 0
-            entry_price = 0
+        price = df['close'].iloc[i]
 
-    # Se ainda tiver posição aberta no final, vende tudo no último preço
+        # Sinal de cruzamento
+        if short_sma.iloc[i] > long_sma.iloc[i]:
+            # Cruzou para cima (sinal de compra)
+            if position <= 0:  # Se não estiver comprado
+                if position < 0:
+                    # Fechar short
+                    balance += abs(position) * (entry_price - price) * (1 - fee)
+                    position = 0
+
+                # Abrir long
+                size = (balance * (1 - fee)) / price
+                position = size
+                entry_price = price
+
+        elif short_sma.iloc[i] < long_sma.iloc[i]:
+            # Cruzou para baixo (sinal de venda)
+            if position >= 0:  # Se não estiver vendido
+                if position > 0:
+                    # Fechar long
+                    balance += position * (price - entry_price) * (1 - fee)
+                    position = 0
+
+                # Abrir short
+                size = (balance * (1 - fee)) / price
+                position = -size
+                entry_price = price
+
+    # Fechar posição aberta no final
+    final_price = df['close'].iloc[-1]
     if position > 0:
-        balance = (position * df['close'].iloc[-1]) * (1 - fee)
+        balance += position * (final_price - entry_price) * (1 - fee)
+    elif position < 0:
+        balance += abs(position) * (entry_price - final_price) * (1 - fee)
 
     return {
         'short_window': short_window,
