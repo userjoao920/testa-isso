@@ -4,7 +4,7 @@ import time
 import itertools
 import logging
 from flask import Flask
-import threading
+import multiprocessing
 
 # Configuração de log
 logging.basicConfig(level=logging.INFO)
@@ -126,14 +126,15 @@ def home():
     else:
         return "<h1>Rodando backtest...</h1><p>Isso pode levar algum tempo, aguarde!</p>"
 
-# Rodar o backtest em segundo plano quando iniciar o servidor Flask
+# Rodar o backtest em segundo plano como um processo separado
 def iniciar_backtest():
     global melhores_resultados
     melhores_resultados = rodar_backtest_em_segundo_plano()
 
 if __name__ == "__main__":
-    # Iniciar backtest em segundo plano
-    threading.Thread(target=iniciar_backtest, daemon=True).start()
+    # Rodar o backtest em processo separado
+    p = multiprocessing.Process(target=iniciar_backtest)
+    p.start()
     
     # Iniciar o servidor Flask
     app.run(host="0.0.0.0", port=10000)
