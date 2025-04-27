@@ -42,20 +42,25 @@ def simulate(cross):
     long_sma = df['close'].rolling(window=long_window).mean()
 
     in_position = False
-    balance = 1000
+    balance = 1000  # Valor inicial do capital
     token_amount = 0
-    fee = 0.003  # 0.3%
+    fee = 0.003  # 0.3% de taxa
 
+    # Para cada candle, verifica se há oportunidade de compra ou venda
     for i in range(max(short_window, long_window), len(df)):
+        # Compra: Quando a média curta cruza acima da média longa
         if short_sma[i] > long_sma[i] and not in_position:
-            token_amount = (balance * (1 - fee)) / df['close'][i]
-            balance = 0
+            token_amount = (balance * (1 - fee)) / df['close'][i]  # Compra com o saldo disponível
+            balance = 0  # O saldo é 0 após a compra
             in_position = True
+        
+        # Venda: Quando a média curta cruza abaixo da média longa
         elif short_sma[i] < long_sma[i] and in_position:
-            balance = (token_amount * df['close'][i]) * (1 - fee)
-            token_amount = 0
+            balance = (token_amount * df['close'][i]) * (1 - fee)  # Vende os tokens e atualiza o saldo
+            token_amount = 0  # Não tem mais tokens após a venda
             in_position = False
-
+    
+    # Se ainda estiver com uma posição aberta, fecha a posição com o último preço disponível
     if in_position:
         balance = (token_amount * df['close'].iloc[-1]) * (1 - fee)
 
