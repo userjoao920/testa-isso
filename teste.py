@@ -31,42 +31,56 @@ def pegar_candles():
         logger.error(f"Erro ao pegar candles: {e}")
         return []
 
-# Função para fazer o backtest
+# Função para fazer o backtest corretamente
 def backtestar(precos, media_rapida, media_lenta):
     saldo = capital_inicial
-    posicao = None  # Nenhuma posição no início
-
-    fees = 0  # controle de taxas pagas
-    historico_operacoes = []
+    posicao = None  # comprado ou vendido
+    preco_entrada = None
+    fees = 0
 
     for i in range(media_lenta, len(precos)):
         fechamento = precos[i]
-
         media_f = np.mean(precos[i - media_rapida:i])
         media_l = np.mean(precos[i - media_lenta:i])
 
-        # Cruzamento de médias
         if media_f > media_l:
             if posicao != "comprado":
                 if posicao == "vendido":
-                    saldo *= (2 - taxa_operacao)  # fechou venda
+                    # Fecha vendido
+                    retorno_pct = (preco_entrada - fechamento) / preco_entrada
+                    saldo *= (1 + retorno_pct)
+                    saldo *= (1 - taxa_operacao)
                     fees += saldo * taxa_operacao
-                posicao = "comprado"
+                # Abre comprado
+                preco_entrada = fechamento
                 saldo *= (1 - taxa_operacao)
                 fees += saldo * taxa_operacao
+                posicao = "comprado"
 
         elif media_f < media_l:
             if posicao != "vendido":
                 if posicao == "comprado":
-                    saldo *= (2 - taxa_operacao)  # fechou compra
+                    # Fecha comprado
+                    retorno_pct = (fechamento - preco_entrada) / preco_entrada
+                    saldo *= (1 + retorno_pct)
+                    saldo *= (1 - taxa_operacao)
                     fees += saldo * taxa_operacao
-                posicao = "vendido"
+                # Abre vendido
+                preco_entrada = fechamento
                 saldo *= (1 - taxa_operacao)
                 fees += saldo * taxa_operacao
+                posicao = "vendido"
 
-    # Fecha posição no final
-    if posicao is not None:
-        saldo *= (2 - taxa_operacao)
+    # Fecha última operação
+    if posicao == "comprado":
+        retorno_pct = (fechamento - preco_entrada) / preco_entrada
+        saldo *= (1 + retorno_pct)
+        saldo *= (1 - taxa_operacao)
+        fees += saldo * taxa_operacao
+    elif posicao == "vendido":
+        retorno_pct = (preco_entrada - fechamento) / preco_entrada
+        saldo *= (1 + retorno_pct)
+        saldo *= (1 - taxa_operacao)
         fees += saldo * taxa_operacao
 
     retorno = ((saldo - capital_inicial) / capital_inicial) * 100  # crescimento em %
@@ -101,13 +115,11 @@ def rodar_backtest():
             })
             testes_realizados += 1
 
-            # Atualizar progresso a cada 5% ou 5 minutos
             if testes_realizados % int(total_testes * 0.05) == 0 or (time.time() - inicio) > 300:
                 progresso = (testes_realizados / total_testes) * 100
                 logger.info(f"Progresso: {progresso:.2f}% concluído ({testes_realizados}/{int(total_testes)} testes)")
                 inicio = time.time()
 
-    # Ordenar pelos melhores retornos
     combinacoes_resultados.sort(key=lambda x: x['retorno'], reverse=True)
     top_10 = combinacoes_resultados[:10]
 
