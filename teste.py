@@ -104,7 +104,7 @@ def rodar_backtest():
     inicio = time.time()
 
     for media_rapida in range(5, 200):
-        for media_lenta in range(media_rapida + 1, 201):
+        for media_lenta in range(media_rapida + 1, 201):  # Garantir que média lenta > média rápida
             saldo_final, retorno_final, taxas = backtestar(precos, media_rapida, media_lenta)
             combinacoes_resultados.append({
                 "media_rapida": media_rapida,
@@ -115,6 +115,7 @@ def rodar_backtest():
             })
             testes_realizados += 1
 
+            # Notificação do progresso
             if testes_realizados % int(total_testes * 0.05) == 0 or (time.time() - inicio) > 300:
                 progresso = (testes_realizados / total_testes) * 100
                 logger.info(f"Progresso: {progresso:.2f}% concluído ({testes_realizados}/{int(total_testes)} testes)")
