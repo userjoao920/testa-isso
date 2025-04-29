@@ -3,6 +3,8 @@ import vectorbt as vbt
 import ccxt
 import time
 from tqdm import tqdm
+import threading
+from flask import Flask
 
 # Função para baixar os dados
 def baixar_dados():
