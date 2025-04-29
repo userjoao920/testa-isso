@@ -51,8 +51,8 @@ def Testar_ma(fast_window, slow_window, close):
 def rodar_backtest():
     global bot_status
     close = baixar_dados()
-    fast_range = range(1, 1001)
-    slow_range = range(1, 1001)
+    fast_range = range(1, 501)
+    slow_range = range(1, 501)
     total = sum(1 for f in fast_range for s in slow_range if f < s)
     results = []
 
