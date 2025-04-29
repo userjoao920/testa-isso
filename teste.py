@@ -55,10 +55,8 @@ def rodar_backtest():
     slow_range = range(1, 501)
     total = sum(1 for f in fast_range for s in slow_range if f < s)
     results = []
-
-    start_time = time.time()
-    last_save_time = start_time
     testados = 0
+    progresso_logado = set()
 
     bot_status = "Executando combinações..."
 
@@ -72,16 +70,11 @@ def rodar_backtest():
                 results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
                 testados += 1
 
-            now = time.time()
-            if now - last_save_time >= 300:  # A cada 5 minutos
-                df = pd.DataFrame(results)
-                df.to_csv("resultados_parciais.csv", index=False)
-                restantes = total - testados
-                logging.info(f"Salvo parcial: {testados} testados, {restantes} restantes.")
-                last_save_time = now
-                bot_status = f"Parcial salvo com {testados} combinações testadas..."
+                progresso = int((testados / total) * 100)
+                if progresso % 10 == 0 and progresso not in progresso_logado:
+                    logging.info(f"Progresso: {progresso}% ({testados}/{total} combinações testadas)")
+                    progresso_logado.add(progresso)
 
-    # Salvar resultado final
     df = pd.DataFrame(results)
     df.to_csv("results.csv", index=False)
     top = df.sort_values(by="saldo_final", ascending=False).head(30)
