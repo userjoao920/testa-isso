@@ -2,8 +2,16 @@ import pandas as pd
 import vectorbt as vbt
 import os
 import time
+import logging
 from flask import Flask
 import threading
+
+# Configuração do log
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 
 app = Flask(__name__)
 bot_status = "Bot ainda não iniciou o backtest."
@@ -45,28 +53,35 @@ def rodar_backtest():
     close = baixar_dados()
     fast_range = range(1, 1001)
     slow_range = range(1, 1001)
-    total = len(fast_range) * len(slow_range)
+    total = sum(1 for f in fast_range for s in slow_range if f < s)
     results = []
 
     start_time = time.time()
     last_save_time = start_time
+    testados = 0
 
     bot_status = "Executando combinações..."
 
     for fast in fast_range:
         for slow in slow_range:
+            if fast >= slow:
+                continue
+
             saldo = Testar_ma(fast, slow, close)
             if saldo is not None:
                 results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
+                testados += 1
 
-            # Salvamento a cada 5 minutos
             now = time.time()
-            if now - last_save_time >= 300:
+            if now - last_save_time >= 300:  # A cada 5 minutos
                 df = pd.DataFrame(results)
                 df.to_csv("resultados_parciais.csv", index=False)
+                restantes = total - testados
+                logging.info(f"Salvo parcial: {testados} testados, {restantes} restantes.")
                 last_save_time = now
-                bot_status = f"Parcial salvo com {len(results)} combinações testadas..."
+                bot_status = f"Parcial salvo com {testados} combinações testadas..."
 
+    # Salvar resultado final
     df = pd.DataFrame(results)
     df.to_csv("results.csv", index=False)
     top = df.sort_values(by="saldo_final", ascending=False).head(30)
@@ -74,6 +89,8 @@ def rodar_backtest():
     bot_status = "Top 30 combinações:<br>"
     for _, row in top.iterrows():
         bot_status += f"Fast: {row['fast']}, Slow: {row['slow']}, Saldo: {row['saldo_final']:.2f}<br>"
+
+    logging.info("Backtest completo. Resultados salvos em results.csv.")
 
 @app.route("/")
 def home():
