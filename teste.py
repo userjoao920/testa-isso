@@ -93,5 +93,16 @@ def main():
     for combo in results_sorted[:30]:
         print(f"Fast: {combo['fast']}, Slow: {combo['slow']}, Saldo Final: {combo['saldo_final']}")
 
+app = Flask(__name__) # Iniciar um site em flask
+
+@app.route("/")
+
+def home(): 
+    
+    return f"<h1>Trading bot está rodando!</h1><p>{bot_status}</p>"
+
+    # Iniciar o bot em uma thread separada
+threading.Thread(target=main, daemon=True).start()
+
 if __name__ == "__main__":
-    main()
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
