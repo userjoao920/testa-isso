@@ -50,8 +50,8 @@ def rodar_backtest():
     close = data.get('Close')
 
     results = []
-    for fast in range(1, 20):
-        for slow in range(fast + 1, 20):
+    for fast in range(1,1001):
+        for slow in range(fast + 1, 1001):
             saldo = Testar_ma(fast, slow, close)
             results.append(((fast, slow), saldo))
 
