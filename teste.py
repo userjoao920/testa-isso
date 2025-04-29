@@ -1,153 +1,76 @@
 import threading
 import logging
 import time
-import os
 from flask import Flask
-import ccxt
-import numpy as np
+import vectorbt as vbt
+import pandas as pd
 
-# Configuração de LOG
+# LOG
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Variáveis globais
+# Status do bot
 bot_status = "Bot de Backtest ainda não iniciou..."
 
-# Configurações iniciais
-par = "PEPE/USDC"
-exchange = ccxt.mexc()
-taxa_operacao = 0.001  # 0,1%
-capital_inicial = 100  # 100 dólares simulados
-intervalo = "15m"
-quantidade_candles = 8000
+# Função de teste com médias móveis
+def Testar_ma(fast_window, slow_window, close):
+    fast_ma = vbt.MA.run(close, window=fast_window).ma
+    slow_ma = vbt.MA.run(close, window=slow_window).ma
 
-# Função para buscar os candles
-def pegar_candles():
-    try:
-        dados = exchange.fetch_ohlcv(par, timeframe=intervalo, limit=quantidade_candles)
-        fechar_precos = [item[4] for item in dados]  # preço de fechamento
-        return fechar_precos
-    except Exception as e:
-        logger.error(f"Erro ao pegar candles: {e}")
-        return []
+    cross_up = fast_ma.vbt.crossed_above(slow_ma)
+    cross_down = fast_ma.vbt.crossed_below(slow_ma)
 
-# Função para fazer o backtest corretamente
-def backtestar(precos, media_rapida, media_lenta):
-    saldo = capital_inicial
-    posicao = None  # comprado ou vendido
-    preco_entrada = None
-    fees = 0
+    portfolio = vbt.Portfolio.from_signals(
+        close,
+        entries=cross_up,
+        exits=cross_down,
+        short_entries=cross_down,
+        short_exits=cross_up,
+        init_cash=100,
+        fees=0.001,
+        slippage=0.00
+    )
 
-    for i in range(media_lenta, len(precos)):
-        fechamento = precos[i]
-        media_f = np.mean(precos[i - media_rapida:i])
-        media_l = np.mean(precos[i - media_lenta:i])
+    return portfolio.value().iloc[-1]
 
-        if media_f > media_l:
-            if posicao != "comprado":
-                if posicao == "vendido":
-                    # Fecha vendido
-                    retorno_pct = (preco_entrada - fechamento) / preco_entrada
-                    saldo *= (1 + retorno_pct)
-                    saldo *= (1 - taxa_operacao)
-                    fees += saldo * taxa_operacao
-                # Abre comprado
-                preco_entrada = fechamento
-                saldo *= (1 - taxa_operacao)
-                fees += saldo * taxa_operacao
-                posicao = "comprado"
-
-        elif media_f < media_l:
-            if posicao != "vendido":
-                if posicao == "comprado":
-                    # Fecha comprado
-                    retorno_pct = (fechamento - preco_entrada) / preco_entrada
-                    saldo *= (1 + retorno_pct)
-                    saldo *= (1 - taxa_operacao)
-                    fees += saldo * taxa_operacao
-                # Abre vendido
-                preco_entrada = fechamento
-                saldo *= (1 - taxa_operacao)
-                fees += saldo * taxa_operacao
-                posicao = "vendido"
-
-    # Fecha última operação
-    if posicao == "comprado":
-        retorno_pct = (fechamento - preco_entrada) / preco_entrada
-        saldo *= (1 + retorno_pct)
-        saldo *= (1 - taxa_operacao)
-        fees += saldo * taxa_operacao
-    elif posicao == "vendido":
-        retorno_pct = (preco_entrada - fechamento) / preco_entrada
-        saldo *= (1 + retorno_pct)
-        saldo *= (1 - taxa_operacao)
-        fees += saldo * taxa_operacao
-
-    retorno = ((saldo - capital_inicial) / capital_inicial) * 100  # crescimento em %
-    return saldo, retorno, fees
-
-# Função principal para rodar backtest
+# Função principal de backtest
 def rodar_backtest():
     global bot_status
+    bot_status = "Backtest em andamento..."
 
-    logger.info("Iniciando backtest... Buscando candles...")
-    precos = pegar_candles()
+    logger.info("Baixando dados de candles...")
+    data = vbt.CCXTData.download(
+        symbols='PEPE/USDT',
+        exchange='mexc',
+        timeframe='15m',
+        start='2024-05-01',
+        end='2025-04-28'
+    )
 
-    if not precos:
-        bot_status = "Erro ao buscar candles."
-        return
+    close = data.get('Close')
 
-    combinacoes_resultados = []
-    total_testes = (200 - 5) * (200 - 5) / 2
-    testes_realizados = 0
+    results = []
+    for fast in range(1, 20):
+        for slow in range(fast + 1, 20):
+            saldo = Testar_ma(fast, slow, close)
+            results.append(((fast, slow), saldo))
 
-    inicio = time.time()
+    results = sorted(results, key=lambda x: x[1], reverse=True)
 
-    for media_rapida in range(5, 200):
-        for media_lenta in range(media_rapida + 1, 201):  # Garantir que média lenta > média rápida
-            saldo_final, retorno_final, taxas = backtestar(precos, media_rapida, media_lenta)
-            combinacoes_resultados.append({
-                "media_rapida": media_rapida,
-                "media_lenta": media_lenta,
-                "saldo_final": saldo_final,
-                "retorno": retorno_final,
-                "taxas": taxas
-            })
-            testes_realizados += 1
+    logger.info("\n--- TOP 30 COMBINAÇÕES ---")
+    for combo, saldo in results[:30]:
+        logger.info(f"Fast: {combo[0]}, Slow: {combo[1]}, Saldo Final: {saldo:.2f}")
 
-            # Notificação do progresso
-            if testes_realizados % int(total_testes * 0.05) == 0 or (time.time() - inicio) > 300:
-                progresso = (testes_realizados / total_testes) * 100
-                logger.info(f"Progresso: {progresso:.2f}% concluído ({testes_realizados}/{int(total_testes)} testes)")
-                inicio = time.time()
+    bot_status = "<h1>Backtest finalizado com sucesso!</h1> Veja os logs para as 30 melhores combinações."
 
-    combinacoes_resultados.sort(key=lambda x: x['retorno'], reverse=True)
-    top_10 = combinacoes_resultados[:10]
-
-    logger.info("\n--- TOP 10 COMBINAÇÕES ---")
-    for idx, resultado in enumerate(top_10, 1):
-        logger.info(f"{idx}) Rápida: {resultado['media_rapida']} | Lenta: {resultado['media_lenta']} | "
-                    f"Saldo Final: {resultado['saldo_final']:.2f} | Retorno: {resultado['retorno']:.2f}% | "
-                    f"Taxas Pagas: {resultado['taxas']:.2f}")
-
-    texto_final = ""
-    for idx, resultado in enumerate(top_10, 1):
-        texto_final += (f"<p>{idx}) Média rápida: {resultado['media_rapida']}, "
-                        f"lenta: {resultado['media_lenta']}, "
-                        f"Saldo: ${resultado['saldo_final']:.2f}, "
-                        f"Retorno: {resultado['retorno']:.2f}%, "
-                        f"Taxas pagas: ${resultado['taxas']:.2f}</p>")
-
-    bot_status = "<h1>Backtest concluído!</h1>" + texto_final
-
-# Iniciar o Flask
+# Flask para status
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return f"{bot_status}"
+    return bot_status
 
-# Rodar o bot em thread separada
+# Rodar backtest em segundo plano
 threading.Thread(target=rodar_backtest, daemon=True).start()
 
 if __name__ == "__main__":
