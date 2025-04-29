@@ -1,9 +1,9 @@
+import os
+import time
+import threading
 import pandas as pd
 import vectorbt as vbt
-import ccxt
-import time
 from tqdm import tqdm
-import threading
 from flask import Flask
 
 # Função para baixar os dados
@@ -19,91 +19,81 @@ def baixar_dados():
 
 # Função de teste das médias móveis
 def Testar_ma(fast_window, slow_window, close):
-    # Criar as médias móveis com vectorbt
-    fast_ma = vbt.MA.run(close, window=fast_window).ma  # Média rápida
-    slow_ma = vbt.MA.run(close, window=slow_window).ma  # Média lenta
+    if fast_window >= slow_window:
+        return None
+    try:
+        fast_ma = vbt.MA.run(close, window=fast_window).ma
+        slow_ma = vbt.MA.run(close, window=slow_window).ma
 
-    # Cruzamento das médias móveis para determinar os sinais
-    cross_up = fast_ma.vbt.crossed_above(slow_ma)
-    cross_down = fast_ma.vbt.crossed_below(slow_ma)
+        cross_up = fast_ma.vbt.crossed_above(slow_ma)
+        cross_down = fast_ma.vbt.crossed_below(slow_ma)
 
-    # Sinal de compra (long entry)
-    long_signal = cross_up
+        portfolio = vbt.Portfolio.from_signals(
+            close,
+            entries=cross_up,
+            exits=cross_down,
+            short_entries=cross_down,
+            short_exits=cross_up,
+            init_cash=100,
+            fees=0.001,
+            slippage=0.00
+        )
+        return portfolio.get_final_value()
+    except:
+        return None
 
-    # Sinal de venda (short entry)
-    short_signal = cross_down
-
-    # Criar o portfólio com base nas condições
-    portfolio = vbt.Portfolio.from_signals(
-        close,
-        entries=long_signal,
-        exits=short_signal,
-        short_entries=cross_down,
-        short_exits=cross_up,
-        init_cash=100,
-        fees=0.001,  # Taxa de 0.1%
-        slippage=0.00  # Deslizamento de 0.1%
-    )
-    return portfolio.get_final_value()
-
-# Função para dividir os testes em lotes e salvar progresso
-def testar_combinacoes_em_lotes(fast_range, slow_range, close, batch_size=50, start_from=0):
+# Função para testar as combinações em lotes
+def testar_combinacoes_em_lotes(fast_range, slow_range, close, batch_size=50):
+    global bot_status
     results = []
-    batch_start = start_from
     total_combinations = len(fast_range) * len(slow_range)
-    
-    # Carregar resultados anteriores se existir
     try:
         results_df = pd.read_csv('results.csv')
         results = results_df.to_dict('records')
-        print("Resultados anteriores carregados, retomando a partir de:", len(results))
-        batch_start = len(results)
+        print("Resultados anteriores carregados.")
+        start_index = len(results)
     except FileNotFoundError:
         print("Nenhum resultado anterior encontrado.")
-    
-    # Laço para testar combinações em lotes
-    for i in tqdm(range(batch_start, total_combinations), total=total_combinations, desc="Testando combinações"):
+        start_index = 0
+
+    for i in tqdm(range(start_index, total_combinations), total=total_combinations, desc="Testando combinações"):
         fast_idx = i // len(slow_range)
         slow_idx = i % len(slow_range)
-        
+
         fast = fast_range[fast_idx]
         slow = slow_range[slow_idx]
-        
+
         saldo = Testar_ma(fast, slow, close)
         if saldo is not None:
             results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
 
-        # Salvar progresso a cada lote
         if (i + 1) % batch_size == 0 or i == total_combinations - 1:
-            results_df = pd.DataFrame(results)
-            results_df.to_csv('results.csv', index=False)
-            time.sleep(1)  # Pause para não sobrecarregar o sistema
+            pd.DataFrame(results).to_csv('results.csv', index=False)
+            time.sleep(0.5)
 
-    return results
+    # Ordenar resultados finais e guardar
+    sorted_results = sorted(results, key=lambda x: x['saldo_final'], reverse=True)[:30]
+    bot_status = "\n".join([f"Fast: {r['fast']}, Slow: {r['slow']}, Saldo: {r['saldo_final']:.2f}" for r in sorted_results])
+    pd.DataFrame(results).to_csv('results.csv', index=False)
 
-# Função principal
+# Executa o backtest em uma thread
 def main():
+    global bot_status
+    bot_status = "Inicializando..."
     close = baixar_dados()
-    fast_range = list(range(1, 1002))  # Variação rápida de 1 a 1001
-    slow_range = list(range(1, 1002))  # Variação lenta de 1 a 1001
+    fast_range = list(range(1, 1002))
+    slow_range = list(range(1, 1002))
+    testar_combinacoes_em_lotes(fast_range, slow_range, close)
 
-    # Chama a função para testar combinações em lotes
-    results = testar_combinacoes_em_lotes(fast_range, slow_range, close, batch_size=50)
-
-    # Ordenar os resultados por saldo final e mostrar os 30 melhores
-    results_sorted = sorted(results, key=lambda x: x['saldo_final'], reverse=True)
-    for combo in results_sorted[:30]:
-        print(f"Fast: {combo['fast']}, Slow: {combo['slow']}, Saldo Final: {combo['saldo_final']}")
-
-app = Flask(__name__) # Iniciar um site em flask
+# Flask app
+app = Flask(__name__)
+bot_status = "Aguardando início..."
 
 @app.route("/")
+def home():
+    return f"<h1>Bot está rodando!</h1><pre>{bot_status}</pre>"
 
-def home(): 
-    
-    return f"<h1>Trading bot está rodando!</h1><p>{bot_status}</p>"
-
-    # Iniciar o bot em uma thread separada
+# Iniciar o bot
 threading.Thread(target=main, daemon=True).start()
 
 if __name__ == "__main__":
