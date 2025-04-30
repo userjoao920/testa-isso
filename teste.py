@@ -47,8 +47,8 @@ def Rodar_backtest():
         symbols='PEPE/USDT',
         exchange='mexc',
         timeframe='15m',
-        start='2024-05-01',
-        end='2025-04-28',
+        start='2024-11-01',
+        end='2025-04-29',
         show_progress=True
     )
     logging.info("Download concluído.")
