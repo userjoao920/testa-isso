@@ -37,7 +37,7 @@ def Testar_ma(fast_window, slow_window, close):
     )
     return portfolio.final_value
 
-def rodar_backtest():
+def Rodar_backtest():
     global bot_status
     logging.info("Iniciando download dos dados...")
     data = vbt.CCXTData.download(
@@ -90,7 +90,7 @@ def home():
 
 @app.route("/start")
 def start():
-    threading.Thread(target=rodar_backtest, daemon=True).start()
+    threading.Thread(target= Rodar_backtest, daemon=True).start()
     return "Backtest iniciado em segundo plano!"
 
 if __name__ == "__main__":
