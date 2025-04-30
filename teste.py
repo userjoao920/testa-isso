@@ -46,7 +46,7 @@ def Testar_ma(fast_window, slow_window, close):
         fees=0.001,
         slippage=0.0
     )
-    return portfolio.get_final_value()
+    return portfolio.get_final_value
 
 def rodar_backtest():
     global bot_status
