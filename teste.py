@@ -6,7 +6,7 @@ import logging
 from flask import Flask
 import threading
 
-# Configuração do log
+# Configuração de log
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -46,13 +46,13 @@ def Testar_ma(fast_window, slow_window, close):
         fees=0.001,
         slippage=0.0
     )
-    return portfolio.get_final_value
+    return portfolio.final_value
 
 def rodar_backtest():
     global bot_status
     close = baixar_dados()
-    fast_range = range(1, 101)
-    slow_range = range(1, 101)
+    fast_range = range(1, 1001)
+    slow_range = range(1, 1001)
     total = sum(1 for f in fast_range for s in slow_range if f < s)
     results = []
     testados = 0
@@ -72,7 +72,7 @@ def rodar_backtest():
 
                 progresso = int((testados / total) * 100)
                 if progresso % 10 == 0 and progresso not in progresso_logado:
-                    logging.info(f"Progresso: {progresso}% ({testados}/{total} combinações testadas)")
+                    logging.info(f"Progresso: {progresso}% ({testados}/{total})")
                     progresso_logado.add(progresso)
 
     df = pd.DataFrame(results)
