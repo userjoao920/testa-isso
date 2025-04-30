@@ -16,18 +16,28 @@ logging.basicConfig(
 app = Flask(__name__)
 bot_status = "Bot ainda não iniciou o backtest."
 
-def baixar_dados():
-    logging.info("Iniciando download dos dados...")
-    data = vbt.CCXTData.download(
-        symbols='PEPE/USDT',
-        exchange='mexc',
-        timeframe='15m',
-        start='2024-05-01',
-        end='2025-04-28',
-        show_progress=True  # Exibe barra de progresso durante o download
-    )
-    logging.info("Download concluído.")
-    return data.get('Close')
+def baixar_dados_lentamente():
+    logging.info("Iniciando download dos dados em partes mensais...")
+    datas = pd.date_range(start='2024-05-01', end='2025-04-28', freq='M')
+    datas = list(datas.insert(0, pd.Timestamp('2024-05-01')))  # inclui início
+
+    partes = []
+    for i in range(len(datas) - 1):
+        logging.info(f"Baixando: {datas[i].date()} até {datas[i+1].date()}")
+        parte = vbt.CCXTData.download(
+            symbols='PEPE/USDT',
+            exchange='mexc',
+            timeframe='15m',
+            start=datas[i],
+            end=datas[i+1],
+            show_progress=False
+        )
+        partes.append(parte.get('Close'))
+        time.sleep(2)  # pausa leve após cada mês para não forçar o sistema
+
+    close = pd.concat(partes).sort_index().drop_duplicates()
+    logging.info("Download completo.")
+    return close
 
 def Testar_ma(fast_window, slow_window, close):
     if fast_window >= slow_window:
@@ -53,9 +63,10 @@ def Testar_ma(fast_window, slow_window, close):
 
 def rodar_backtest():
     global bot_status
-    close = baixar_dados()
-    fast_range = range(1, 1001)
-    slow_range = range(1, 1001)
+    close = baixar_dados_lentamente()
+    fast_range = range(1, 251)  # Ajustado para 1 até 250
+    slow_range = range(2, 251)  # Ajustado para 2 até 250
+
     total = sum(1 for f in fast_range for s in slow_range if f < s)
     results = []
     testados = 0
@@ -78,9 +89,7 @@ def rodar_backtest():
                     logging.info(f"Progresso: {progresso}% ({testados}/{total} combinações testadas)")
                     progresso_logado.add(progresso)
 
-        if i % 10 == 0:
-            logging.info(f"Aguardando 10 segundos após processar {i} médias rápidas...")
-            time.sleep(10)
+                time.sleep(0.2)  # Pausa de 0.2 segundos após cada backtest
 
     df = pd.DataFrame(results)
     df.to_csv("results.csv", index=False)
