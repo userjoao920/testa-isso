@@ -39,7 +39,6 @@ def Testar_ma(fast_window, slow_window, close):
 
 def rodar_backtest():
     global bot_status
-    # Baixando os dados diretamente na função rodar_backtest
     logging.info("Iniciando download dos dados...")
     data = vbt.CCXTData.download(
         symbols='PEPE/USDT',
@@ -47,17 +46,15 @@ def rodar_backtest():
         timeframe='15m',
         start='2024-05-01',
         end='2025-04-28',
-        show_progress=True  # Exibe barra de progresso durante o download
+        show_progress=True
     )
     logging.info("Download concluído.")
     close = data.get('Close')
     
-    fast_range = range(1, 251)  # Alterei para 1 a 250
+    fast_range = range(1, 251)
     slow_range = range(1, 251)
-    total = sum(1 for f in fast_range for s in slow_range if f < s)
     results = []
     testados = 0
-    progresso_logado = set()
 
     bot_status = "Executando combinações..."
 
@@ -71,16 +68,12 @@ def rodar_backtest():
                 results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
                 testados += 1
 
-                # Armazenar apenas as 30 melhores combinações
                 if len(results) > 30:
                     results = sorted(results, key=lambda x: x['saldo_final'], reverse=True)[:30]
 
-        # Limpar os dados do backtest após cada iteração
-        del close
         import gc
         gc.collect()
 
-    # Convertendo resultados para DataFrame e retornando as melhores combinações
     df = pd.DataFrame(results)
     df.to_csv("results.csv", index=False)
     top = df.sort_values(by="saldo_final", ascending=False).head(30)
@@ -99,3 +92,7 @@ def home():
 def start():
     threading.Thread(target=rodar_backtest, daemon=True).start()
     return "Backtest iniciado em segundo plano!"
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
