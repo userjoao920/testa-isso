@@ -15,41 +15,32 @@ logging.basicConfig(
 )
 
 app = Flask(__name__)
-backtest_rodando = False
 
-def testar_ma(fast, slow, close):
-    if fast >= slow:
+def testar_ma(fast_window, slow_window, close):
+    if fast_window >= slow_window:
         return None
-    try:
-        fast_ma = vbt.MA.run(close, window=fast).ma
-        slow_ma = vbt.MA.run(close, window=slow).ma
 
-        cross_up = fast_ma.vbt.crossed_above(slow_ma)
-        cross_down = fast_ma.vbt.crossed_below(slow_ma)
+    fast_ma = vbt.MA.run(close, window=fast_window).ma
+    slow_ma = vbt.MA.run(close, window=slow_window).ma
 
-        portfolio = vbt.Portfolio.from_signals(
-            close,
-            entries=cross_up,
-            exits=cross_down,
-            short_entries=cross_down,
-            short_exits=cross_up,
-            init_cash=100,
-            fees=0.001,
-            slippage=0.0
-        )
-        saldo = portfolio.value().iloc[-1]
+    cross_up = fast_ma.vbt.crossed_above(slow_ma)
+    cross_down = fast_ma.vbt.crossed_below(slow_ma)
 
-        # Limpeza de memória
-        del fast_ma, slow_ma, cross_up, cross_down, portfolio
-        gc.collect()
+    portfolio = vbt.Portfolio.from_signals(
+        close,
+        entries=cross_up,
+        exits=cross_down,
+        short_entries=cross_down,
+        short_exits=cross_up,
+        init_cash=100,
+        fees=0.001,
+        slippage=0.0
+    )
 
-        return saldo
-    except Exception as e:
-        logging.warning(f"Erro em fast={fast}, slow={slow}: {e}")
-        return None
+    return portfolio.final_value()
 
 def rodar_backtest():
-    logging.info("Baixando dados...")
+    logging.info("Iniciando download dos dados...")
     data = vbt.CCXTData.download(
         symbols='PEPE/USDT',
         exchange='mexc',
@@ -58,17 +49,17 @@ def rodar_backtest():
         end='2025-04-29',
         show_progress=True
     )
+    logging.info("Download concluído.")
     close = data.get('Close')
-    logging.info("Download finalizado.")
-
-    fast_range = range(1, 201)
-    slow_range = range(2, 202)
-    total = sum(1 for f in fast_range for s in slow_range if f < s)
+    
+    fast_range = range(1, 1001)
+    slow_range = range(1, 1001)
+    results = []
     testados = 0
-    resultados = []
-
+    total_combinacoes = sum(1 for f in fast_range for s in slow_range if f < s)
     inicio = time.time()
-    logging.info("Iniciando backtest...")
+
+    logging.info("Executando combinações...")
 
     for fast in fast_range:
         for slow in slow_range:
@@ -76,35 +67,43 @@ def rodar_backtest():
                 continue
 
             saldo = testar_ma(fast, slow, close)
-            testados += 1
-
             if saldo is not None:
-                resultados.append({'fast': fast, 'slow': slow, 'saldo': saldo})
+                results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
+                testados += 1
 
-                if len(resultados) > 30:
-                    resultados = sorted(resultados, key=lambda x: x['saldo'], reverse=True)[:30]
+                if len(results) > 30:
+                    results = sorted(results, key=lambda x: x['saldo_final'], reverse=True)[:30]
 
-            if testados % 100 == 0:
-                tempo = int((time.time() - inicio) // 60)
-                restantes = total - testados
-                logging.info(f"Testados: {testados}/{total} - Restantes: {restantes} - Tempo: {tempo} min")
+            if testados % 500 == 0:
+                tempo_decorrido = int((time.time() - inicio) // 60)
+                restantes = total_combinacoes - testados
+                logging.info(f"Testados: {testados}, Restantes: {restantes}, Tempo: {tempo_decorrido} min")
 
-            gc.collect()
+            time.sleep(0.01)
+        gc.collect()
 
-    df = pd.DataFrame(resultados)
-    df.to_csv("top30.csv", index=False)
+    df = pd.DataFrame(results)
+    df.to_csv("results.csv", index=False)
+    top = df.sort_values(by="saldo_final", ascending=False).head(30)
 
-    logging.info("Backtest concluído! Top 30 combinações:")
-    for r in resultados:
-        logging.info(f"Fast: {r['fast']}, Slow: {r['slow']}, Saldo: {r['saldo']:.2f}")
+    logging.info("Top 30 combinações:")
+    for _, row in top.iterrows():
+        logging.info(f"Fast: {row['fast']}, Slow: {row['slow']}, Saldo: {row['saldo_final']:.2f}")
+
+    logging.info("Backtest completo. Resultados salvos em results.csv.")
+
+    # Remove o arquivo de lock ao final
+    if os.path.exists("backtest.lock"):
+        os.remove("backtest.lock")
 
 @app.route("/")
 def home():
-    global backtest_rodando
-    if not backtest_rodando:
+    if not os.path.exists("backtest.lock"):
+        open("backtest.lock", "w").close()
         threading.Thread(target=rodar_backtest, daemon=True).start()
-        backtest_rodando = True
         logging.info("Backtest iniciado em segundo plano.")
+    else:
+        logging.info("Backtest já está rodando. Nenhuma ação tomada.")
     return "<h1>Bot de backtest em execução...</h1>"
 
 if __name__ == "__main__":
