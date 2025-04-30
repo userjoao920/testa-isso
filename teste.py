@@ -70,15 +70,13 @@ def rodar_backtest():
                 results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
                 testados += 1
 
-                # Progresso de 10%
                 progresso = int((testados / total) * 100)
                 if progresso % 10 == 0 and progresso not in progresso_logado:
-                    logging.info(f"Progresso: {progresso}% ({testados}/{total})")
+                    logging.info(f"Progresso: {progresso}% ({testados}/{total} combinações testadas)")
                     progresso_logado.add(progresso)
 
-        # Espera 5 segundos a cada 10 fast_window processados
         if i % 10 == 0:
-            logging.info(f"Aguardando 5 segundos após {i} janelas rápidas testadas...")
+            logging.info(f"Aguardando 5 segundos após processar {i} médias rápidas...")
             time.sleep(5)
 
     df = pd.DataFrame(results)
