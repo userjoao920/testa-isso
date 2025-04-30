@@ -17,13 +17,16 @@ app = Flask(__name__)
 bot_status = "Bot ainda não iniciou o backtest."
 
 def baixar_dados():
+    logging.info("Iniciando download dos dados...")
     data = vbt.CCXTData.download(
         symbols='PEPE/USDT',
         exchange='mexc',
         timeframe='15m',
         start='2024-05-01',
         end='2025-04-28',
+        show_progress=True  # Exibe barra de progresso durante o download
     )
+    logging.info("Download concluído.")
     return data.get('Close')
 
 def Testar_ma(fast_window, slow_window, close):
@@ -72,7 +75,7 @@ def rodar_backtest():
 
                 progresso = int((testados / total) * 100)
                 if progresso % 10 == 0 and progresso not in progresso_logado:
-                    logging.info(f"Progresso: {progresso}% ({testados}/{total})")
+                    logging.info(f"Progresso: {progresso}% ({testados}/{total} combinações testadas)")
                     progresso_logado.add(progresso)
 
         if i % 10 == 0:
