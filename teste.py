@@ -37,10 +37,8 @@ def Testar_ma(fast_window, slow_window, close):
         fees=0.001,
         slippage=0.0
     )
-    final_value = portfolio.final_value
-    del portfolio  # Remove da memória
-    gc.collect()
-    return final_value
+
+    return portfolio.final_value()
 
 def Rodar_backtest():
     global bot_status
@@ -55,14 +53,13 @@ def Rodar_backtest():
     )
     logging.info("Download concluído.")
     close = data.get('Close')
-
-    fast_range = range(1, 251)
-    slow_range = range(1, 251)
-    total_combinacoes = sum(1 for f in fast_range for s in slow_range if f < s)
-
+    
+    fast_range = range(1, 1001)
+    slow_range = range(1, 1001)
     results = []
     testados = 0
-    inicio_tempo = time.time()
+    total_combinacoes = sum(1 for f in fast_range for s in slow_range if f < s)
+    inicio = time.time()
 
     bot_status = "Executando combinações..."
 
@@ -76,18 +73,17 @@ def Rodar_backtest():
                 results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
                 testados += 1
 
-                # Manter apenas os top 30
+                # Mantém apenas top 30
                 if len(results) > 30:
                     results = sorted(results, key=lambda x: x['saldo_final'], reverse=True)[:30]
 
-            # Aguarda 0.01 segundo por combinação
-            time.sleep(0.01)
+            if testados % 500 == 0:
+                tempo_decorrido = int((time.time() - inicio) // 60)
+                restantes = total_combinacoes - testados
+                logging.info(f"Testados: {testados}, Restantes: {restantes}, Tempo: {tempo_decorrido} min")
 
-            # Atualiza status a cada 5 minutos
-            if time.time() - inicio_tempo > 300:
-                restante = total_combinacoes - testados
-                logging.info(f"Testados: {testados}, Faltam: {restante}")
-                inicio_tempo = time.time()
+            time.sleep(0.01)
+        gc.collect()
 
     df = pd.DataFrame(results)
     df.to_csv("results.csv", index=False)
@@ -101,12 +97,9 @@ def Rodar_backtest():
 
 @app.route("/")
 def home():
-    return f"<h1>Trading bot está ativo!</h1><p>{bot_status}</p>"
-
-@app.route("/start")
-def start():
     threading.Thread(target=Rodar_backtest, daemon=True).start()
-    return "Backtest iniciado em segundo plano!"
+    logging.info("Backtest iniciado em segundo plano!")
+    return f"<h1>Trading bot está ativo</h1><p>{bot_status}</p>"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
