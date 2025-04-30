@@ -72,12 +72,14 @@ def rodar_backtest():
 
                 progresso = int((testados / total) * 100)
                 if progresso % 10 == 0 and progresso not in progresso_logado:
-                    logging.info(f"Progresso: {progresso}% ({testados}/{total} combinações testadas)")
+                    logging.info(f"Progresso: {progresso}% ({testados}/{total})")
                     progresso_logado.add(progresso)
+                    logging.info(f"Aguardando 5 segundos após {progresso}% de progresso...")
+                    time.sleep(5)
 
         if i % 10 == 0:
-            logging.info(f"Aguardando 5 segundos após processar {i} médias rápidas...")
-            time.sleep(5)
+            logging.info(f"Aguardando 10 segundos após processar {i} médias rápidas...")
+            time.sleep(10)
 
     df = pd.DataFrame(results)
     df.to_csv("results.csv", index=False)
