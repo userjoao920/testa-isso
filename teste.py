@@ -51,8 +51,8 @@ def Rodar_backtest():
     logging.info("Download concluído.")
     close = data.get('Close')
     
-    fast_range = range(1, 251)
-    slow_range = range(1, 251)
+    fast_range = range(1, 1001)
+    slow_range = range(1, 1001)
     results = []
     testados = 0
 
@@ -86,12 +86,10 @@ def Rodar_backtest():
 
 @app.route("/")
 def home():
-    return f"<h1>Trading bot está rodando!</h1><p>{bot_status}</p>"
-
-@app.route("/start")
-def start():
+    return f"<h1>Trading bot está ativo "
+    
     threading.Thread(target= Rodar_backtest, daemon=True).start()
-    return "Backtest iniciado em segundo plano!"
+    logging.info("Backtest iniciado em segundo plano!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
