@@ -15,19 +15,6 @@ logging.basicConfig(
 app = Flask(__name__)
 bot_status = "Bot ainda não iniciou o backtest."
 
-def baixar_dados():
-    logging.info("Iniciando download dos dados...")
-    data = vbt.CCXTData.download(
-        symbols='PEPE/USDT',
-        exchange='mexc',
-        timeframe='15m',
-        start='2024-05-01',
-        end='2025-04-28',
-        show_progress=True  # Exibe barra de progresso durante o download
-    )
-    logging.info("Download concluído.")
-    return data.get('Close')
-
 def Testar_ma(fast_window, slow_window, close):
     if fast_window >= slow_window:
         return None
@@ -52,7 +39,19 @@ def Testar_ma(fast_window, slow_window, close):
 
 def rodar_backtest():
     global bot_status
-    close = baixar_dados()
+    # Baixando os dados diretamente na função rodar_backtest
+    logging.info("Iniciando download dos dados...")
+    data = vbt.CCXTData.download(
+        symbols='PEPE/USDT',
+        exchange='mexc',
+        timeframe='15m',
+        start='2024-05-01',
+        end='2025-04-28',
+        show_progress=True  # Exibe barra de progresso durante o download
+    )
+    logging.info("Download concluído.")
+    close = data.get('Close')
+    
     fast_range = range(1, 251)  # Alterei para 1 a 250
     slow_range = range(1, 251)
     total = sum(1 for f in fast_range for s in slow_range if f < s)
