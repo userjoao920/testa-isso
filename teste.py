@@ -45,7 +45,7 @@ def rodar_backtest():
         symbols='PEPE/USDT',
         exchange='mexc',
         timeframe='15m',
-        start='2024-11-01',
+        start='2025-02-01',
         end='2025-04-29',
         show_progress=True
     )
