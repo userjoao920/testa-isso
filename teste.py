@@ -74,8 +74,6 @@ def rodar_backtest():
                 if progresso % 10 == 0 and progresso not in progresso_logado:
                     logging.info(f"Progresso: {progresso}% ({testados}/{total})")
                     progresso_logado.add(progresso)
-                    logging.info(f"Aguardando 5 segundos após {progresso}% de progresso...")
-                    time.sleep(5)
 
         if i % 10 == 0:
             logging.info(f"Aguardando 10 segundos após processar {i} médias rápidas...")
