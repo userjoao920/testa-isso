@@ -35,7 +35,7 @@ def Testar_ma(fast_window, slow_window, close):
         fees=0.001,
         slippage=0.0
     )
-    return portfolio.final_value
+    return portfolio.final_value()  # Correção aqui
 
 def Rodar_backtest():
     global bot_status
@@ -54,7 +54,6 @@ def Rodar_backtest():
     fast_range = range(1, 1001)
     slow_range = range(1, 1001)
     results = []
-    testados = 0
 
     bot_status = "Executando combinações..."
 
@@ -66,7 +65,6 @@ def Rodar_backtest():
             saldo = Testar_ma(fast, slow, close)
             if saldo is not None:
                 results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
-                testados += 1
 
                 if len(results) > 30:
                     results = sorted(results, key=lambda x: x['saldo_final'], reverse=True)[:30]
@@ -86,10 +84,13 @@ def Rodar_backtest():
 
 @app.route("/")
 def home():
-    return f"<h1>Trading bot está ativo "
+    return f"<h1>Trading bot está ativo!</h1><p>{bot_status}</p>"
 
-threading.Thread(target= Rodar_backtest, daemon=True).start()
-logging.info("Backtest iniciado em segundo plano!")
+@app.route("/start")
+def start():
+    threading.Thread(target=Rodar_backtest, daemon=True).start()
+    logging.info("Backtest iniciado em segundo plano!")
+    return "Backtest iniciado!"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
