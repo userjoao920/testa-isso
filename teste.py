@@ -52,8 +52,8 @@ def rodar_backtest():
     logging.info("Download concluído.")
     close = data.get('Close')
     
-    fast_range = range(1, 1001)
-    slow_range = range(1, 1001)
+    fast_range = range(1, 101)
+    slow_range = range(1, 101)
     results = []
     testados = 0
     total_combinacoes = sum(1 for f in fast_range for s in slow_range if f < s)
