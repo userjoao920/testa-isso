@@ -99,6 +99,3 @@ def home():
 def start():
     threading.Thread(target=rodar_backtest, daemon=True).start()
     return "Backtest iniciado em segundo plano!"
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
