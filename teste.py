@@ -16,7 +16,6 @@ logging.basicConfig(
 
 app = Flask(__name__)
 bot_status = "Bot ainda não iniciou o backtest."
-status_lock = threading.Lock()
 
 def Testar_ma(fast_window, slow_window, close):
     if fast_window >= slow_window:
@@ -38,11 +37,13 @@ def Testar_ma(fast_window, slow_window, close):
         fees=0.001,
         slippage=0.0
     )
-    return portfolio.final_value()
+    final_value = portfolio.final_value
+    del portfolio  # Remove da memória
+    gc.collect()
+    return final_value
 
 def Rodar_backtest():
     global bot_status
-
     logging.info("Iniciando download dos dados...")
     data = vbt.CCXTData.download(
         symbols='PEPE/USDT',
@@ -55,63 +56,57 @@ def Rodar_backtest():
     logging.info("Download concluído.")
     close = data.get('Close')
 
-    fast_range = range(1, 1001)
-    slow_range = range(1, 1001)
+    fast_range = range(1, 251)
+    slow_range = range(1, 251)
     total_combinacoes = sum(1 for f in fast_range for s in slow_range if f < s)
-    testados = 0
+
     results = []
+    testados = 0
+    inicio_tempo = time.time()
 
-    inicio = time.time()
-    atualizacao_intervalo = 300  # 5 minutos
+    bot_status = "Executando combinações..."
 
-    with status_lock:
-        bot_status = f"Iniciando backtest com {total_combinacoes} combinações..."
-
-    for fast in fast_range:
+    for i, fast in enumerate(fast_range, start=1):
         for slow in slow_range:
             if fast >= slow:
                 continue
 
             saldo = Testar_ma(fast, slow, close)
-            time.sleep(0.01)
-            testados += 1
-
             if saldo is not None:
                 results.append({'fast': fast, 'slow': slow, 'saldo_final': saldo})
+                testados += 1
+
+                # Manter apenas os top 30
                 if len(results) > 30:
                     results = sorted(results, key=lambda x: x['saldo_final'], reverse=True)[:30]
 
-            if time.time() - inicio >= atualizacao_intervalo:
-                with status_lock:
-                    bot_status = f"Progresso: {testados}/{total_combinacoes} combinações testadas."
-                logging.info(bot_status)
-                inicio = time.time()
+            # Aguarda 0.01 segundo por combinação
+            time.sleep(0.01)
 
-        gc.collect()
+            # Atualiza status a cada 5 minutos
+            if time.time() - inicio_tempo > 300:
+                restante = total_combinacoes - testados
+                logging.info(f"Testados: {testados}, Faltam: {restante}")
+                inicio_tempo = time.time()
 
     df = pd.DataFrame(results)
     df.to_csv("results.csv", index=False)
     top = df.sort_values(by="saldo_final", ascending=False).head(30)
 
-    resumo = "Top 30 combinações:<br>"
+    bot_status = "Top 30 combinações:<br>"
     for _, row in top.iterrows():
-        resumo += f"Fast: {row['fast']}, Slow: {row['slow']}, Saldo: {row['saldo_final']:.2f}<br>"
-
-    with status_lock:
-        bot_status = resumo
+        bot_status += f"Fast: {row['fast']}, Slow: {row['slow']}, Saldo: {row['saldo_final']:.2f}<br>"
 
     logging.info("Backtest completo. Resultados salvos em results.csv.")
 
 @app.route("/")
 def home():
-    with status_lock:
-        return f"<h1>Status do Bot</h1><p>{bot_status}</p>"
+    return f"<h1>Trading bot está ativo!</h1><p>{bot_status}</p>"
 
 @app.route("/start")
 def start():
     threading.Thread(target=Rodar_backtest, daemon=True).start()
-    logging.info("Backtest iniciado em segundo plano!")
-    return "Backtest iniciado!"
+    return "Backtest iniciado em segundo plano!"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
