@@ -45,15 +45,15 @@ def rodar_backtest():
         symbols='PEPE/USDT',
         exchange='mexc',
         timeframe='15m',
-        start='2025-04-01',
+        start='2024-06-01',
         end='2025-04-30',
         show_progress=True
     )
     logging.info("Download concluído.")
     close = data.get('Close')
     
-    fast_range = range(1, 101)
-    slow_range = range(1, 101)
+    fast_range = range(13, 14)
+    slow_range = range(14, 1001)
     results = []
     testados = 0
     total_combinacoes = sum(1 for f in fast_range for s in slow_range if f < s)
