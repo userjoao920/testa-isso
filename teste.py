@@ -33,7 +33,7 @@ def testar_ma(fast_window, slow_window, close):
         short_entries=cross_down,
         short_exits=cross_up,
         init_cash=100,
-        fees=0.001,
+        fees=0.003,
         slippage=0.0
     )
 
@@ -53,7 +53,7 @@ def rodar_backtest():
     close = data.get('Close')
     
     fast_range = range(13, 14)
-    slow_range = range(14, 1001)
+    slow_range = range(14, 501)
     results = []
     testados = 0
     total_combinacoes = sum(1 for f in fast_range for s in slow_range if f < s)
